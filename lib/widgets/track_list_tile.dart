@@ -129,6 +129,7 @@ class TrackListTile extends ConsumerWidget {
             ),
           if (!isSelectionMode)
             StudioDownloadButton(
+              onChooseQuality: () => onDownload(forceQualityPicker: true),
               onDownload: () => onDownload(),
               isQueued: isQueued,
             ),
