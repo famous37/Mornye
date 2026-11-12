@@ -335,6 +335,7 @@ class _TrackItemWithStatus extends ConsumerWidget {
                   ),
                   OnlinePlayButton(tracks: [track], index: 0),
                   StudioDownloadButton(
+                    onChooseQuality: () => onDownload(forceQualityPicker: true),
                     onDownload: () => onDownload(),
                     isQueued: isQueued,
                   ),
