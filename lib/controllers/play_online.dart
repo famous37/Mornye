@@ -6,69 +6,63 @@ import 'package:mornye/models/track.dart';
 import 'package:mornye/providers/extension_provider.dart';
 import 'package:mornye/providers/music_player_provider.dart';
 import 'package:mornye/services/music_player_service.dart';
+import 'package:mornye/services/online_stream_support.dart' as online;
 import 'package:mornye/services/platform_bridge.dart';
 
 const onlineStreamScheme = 'mornye-online';
 
-/// Raised only for the signed-session grant required by the extension.
-/// The stock Mornye grant flow opens the provider's actual auth URL.
+/// The signed-session verification flow is shared across providers. It does
+/// not bypass authentication: it opens the actual grant URL and retries once.
 class OnlineStreamVerificationRequired implements Exception {
   const OnlineStreamVerificationRequired();
+
   @override
   String toString() => 'VERIFY_REQUIRED';
 }
 
+// Preserve the public helpers referenced by the existing stream unit tests.
+Map<String, dynamic> onlineStreamRequest(Track track, String quality) =>
+    online.onlineStreamRequest(track, quality);
 
-Map<String, dynamic> onlineStreamRequest(Track track, String quality) => {
-  'id': track.id,
-  'title': track.name,
-  'artist': track.artistName,
-  'album': track.albumName,
-  'isrc': track.isrc ?? '',
-  'duration_ms': track.duration * 1000,
-  'quality': quality,
-};
-
-bool isFullOnlineStream(Map<String, dynamic> result) {
-  final uri = Uri.tryParse(result['url']?.toString().trim() ?? '');
-  return result['success'] != false &&
-      result['full_track'] == true &&
-      result['encrypted'] != true &&
-      result['requires_headers'] != true &&
-      uri != null &&
-      uri.scheme == 'https' &&
-      uri.host.isNotEmpty;
-}
+bool isFullOnlineStream(Map<String, dynamic> result) =>
+    online.isFullOnlineStream(result);
 
 PlayableMedia _item(
   Track track,
-  String provider,
+  String initialProvider,
   String quality,
   int index, {
+  required List<String> availableProviders,
+  required String preferredProvider,
   Map<String, dynamic>? resolved,
 }) {
   final source = resolved == null
       ? Uri(
           scheme: onlineStreamScheme,
-          host: provider,
+          host: 'auto',
           pathSegments: [track.id],
           queryParameters: {
+            'providers': availableProviders.join(','),
+            'preferred': preferredProvider,
+            'source': track.source ?? '',
             'title': track.name,
             'artist': track.artistName,
             'album': track.albumName,
             'isrc': track.isrc ?? '',
+            'deezer_id': track.deezerId ?? '',
             'duration_ms': '${track.duration * 1000}',
             'quality': quality,
           },
         ).toString()
       : resolved['url'].toString();
+
   int? positive(Object? value) {
     final number = value is num ? value.toInt() : int.tryParse('$value');
     return number != null && number > 0 ? number : null;
   }
 
   return PlayableMedia(
-    id: 'online:$provider:$index:${track.id}',
+    id: 'online:$index:${track.id}',
     source: source,
     title: track.name,
     artist: track.artistName,
@@ -76,20 +70,24 @@ PlayableMedia _item(
     artUri: normalizeArtUri(track.coverUrl ?? ''),
     duration: track.duration > 0 ? Duration(seconds: track.duration) : null,
     explicit: track.isExplicit,
-    format: 'FLAC',
+    // Different sources do not all provide FLAC: show the actual response.
+    format: online.receivedStreamFormat(resolved),
     bitDepth: positive(resolved?['bit_depth']),
     sampleRate: positive(resolved?['sample_rate']),
     bitrate: positive(resolved?['bitrate']),
     displayMetadata: {
       'online_stream': true,
-      'online_provider': provider,
+      'online_provider': initialProvider,
+      'online_source_preference': preferredProvider,
       'online_quality': quality,
       'online_request': onlineStreamRequest(track, quality),
     },
   );
 }
 
-/// Play an album/playlist in original order. Later URLs resolve only on play.
+/// Start playback from any enabled, full-track capable extension.
+/// Track provenance or the user's explicit preference determines the priority.
+/// All other compatible providers remain fallback choices.
 Future<void> playOnlineQueue(
   BuildContext context,
   WidgetRef ref,
@@ -99,6 +97,7 @@ Future<void> playOnlineQueue(
 }) async {
   if (tracks.isEmpty || startIndex < 0 || startIndex >= tracks.length) return;
   final container = ProviderScope.containerOf(context, listen: false);
+
   void notify(String message) {
     if (!context.mounted) return;
     final messenger = ScaffoldMessenger.maybeOf(context);
@@ -111,39 +110,52 @@ Future<void> playOnlineQueue(
   try {
     await container.read(extensionProvider.notifier).ensureInitialized();
   } catch (error) {
-    notify('Online provider initialization failed: $error');
+    notify('Streaming extensions could not be initialized: $error');
     return;
   }
-  final extensions = container
+
+  final enabled = container
       .read(extensionProvider)
       .extensions
       .where(
         (extension) =>
             extension.enabled &&
             extension.capabilities['fullTrackStreaming'] == true,
-      );
-  if (extensions.isEmpty) {
-    notify('No streaming provider enabled. Enable Qobuz Online extension.');
+      )
+      .toList();
+
+  if (enabled.isEmpty) {
+    notify(
+      'No full-track streaming extension enabled. Install and enable a '
+      'compatible online source (Qobuz Online, SoundCloud Online, Jellyfin).',
+    );
     return;
   }
 
   final quality = qualityOverride ?? await OnlineStreamSettings.current();
+  final preferred = await OnlineStreamSettings.preferredProvider();
   final track = tracks[startIndex];
+  final enabledIds = [for (final extension in enabled) extension.id];
+  final candidates = online.orderedOnlineProviders(
+    enabledIds,
+    preferred: preferred,
+    trackSource: track.source,
+  );
+  final names = {
+    for (final extension in enabled) extension.id: extension.displayName,
+  };
   final failures = <String>[];
-  for (final extension in extensions) {
+
+  for (final provider in candidates) {
     try {
-      // The Qobuz extension may return {success:false,error:'VERIFY_REQUIRED'}
-      // instead of throwing. Convert that *specific* result into a verification
-      // request so the existing signed-session browser grant flow can complete.
-      // The helper retries exactly once after a successful grant.
       final result = await runExtensionOperationWithVerificationRetry<
         Map<String, dynamic>
       >(
-        extensionId: extension.id,
+        extensionId: provider,
         browserMode: 'external_first',
         operation: () async {
           final response = await PlatformBridge.invokeExtensionAction(
-            extension.id,
+            provider,
             'resolvePlaybackStream',
             input: onlineStreamRequest(track, quality),
           );
@@ -157,17 +169,21 @@ Future<void> playOnlineQueue(
       );
       if (!isFullOnlineStream(result)) {
         failures.add(
-          '${extension.displayName}: ${result['error'] ?? 'No full-track HTTPS URL'}',
+          '${names[provider] ?? provider}: '
+          "${result['error'] ?? 'No directly playable full HTTPS stream'}",
         );
         continue;
       }
+
       final queue = [
         for (var i = 0; i < tracks.length; i++)
           _item(
             tracks[i],
-            extension.id,
+            provider,
             quality,
             i,
+            preferredProvider: preferred,
+            availableProviders: enabledIds,
             resolved: i == startIndex ? result : null,
           ),
       ];
@@ -179,17 +195,13 @@ Future<void> playOnlineQueue(
       await player.playAll(queue, initialIndex: startIndex);
       return;
     } catch (error) {
-      if (isExtensionVerificationRequired(error)) {
-        notify(
-          'Qobuz verification is required. Complete the browser '
-          'verification and try Play again.',
-        );
-        return;
-      }
-      failures.add('${extension.displayName}: $error');
+      failures.add(
+        '${names[provider] ?? provider}: '
+        '${isExtensionVerificationRequired(error) ? 'verification required' : error}',
+      );
     }
   }
-  notify('Online playback failed: ${failures.join('; ')}');
+  notify('No provider could play this track: ${failures.take(3).join('; ')}');
 }
 
 Future<void> playOnline(BuildContext context, WidgetRef ref, Track track) =>
@@ -201,15 +213,27 @@ Future<void> chooseOnlineQuality(
   List<Track> queue, {
   int startIndex = 0,
 }) async {
-  final quality = await OnlineStreamSettings.choose(context);
-  if (quality == null) return;
-  await OnlineStreamSettings.save(quality);
+  final container = ProviderScope.containerOf(context, listen: false);
+  await container.read(extensionProvider.notifier).ensureInitialized();
+  if (!context.mounted) return;
+  final providers = {
+    for (final e in container.read(extensionProvider).extensions)
+      if (e.enabled && e.capabilities['fullTrackStreaming'] == true)
+        e.id: e.displayName,
+  };
+  final selection = await OnlineStreamSettings.choosePlayback(
+    context,
+    providers,
+  );
+  if (selection == null) return;
+  await OnlineStreamSettings.save(selection.quality);
+  await OnlineStreamSettings.savePreferredProvider(selection.provider);
   if (!context.mounted) return;
   await playOnlineQueue(
     context,
     ref,
     queue,
     startIndex: startIndex,
-    qualityOverride: quality,
+    qualityOverride: selection.quality,
   );
 }

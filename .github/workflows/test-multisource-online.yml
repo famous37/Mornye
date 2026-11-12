@@ -1,0 +1,38 @@
+name: Test Mornye Play multi-source streaming
+
+on:
+  push:
+    branches:
+      - feature/multisource-streaming
+    paths:
+      - 'test/online_multisource_test.dart'
+      - 'test/online_stream_test.dart'
+      - 'lib/controllers/play_online.dart'
+      - 'lib/controllers/online_stream_settings.dart'
+      - 'lib/services/online_stream_support.dart'
+      - 'lib/services/music_player_service.dart'
+      - '.github/workflows/test-multisource-online.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version-file: .fvmrc
+          cache: true
+      - name: Configure Flutter toolchain
+        run: dart scripts/prepare_flutter_sdk.dart
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Check changed stream engine
+        run: dart analyze lib/controllers/play_online.dart lib/controllers/online_stream_settings.dart lib/services/online_stream_support.dart lib/services/music_player_service.dart
+      - name: Verify provider selection, full streams and authentication retries
+        run: flutter test test/online_stream_test.dart test/online_multisource_test.dart --reporter expanded
