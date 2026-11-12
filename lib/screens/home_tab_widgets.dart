@@ -236,15 +236,7 @@ class _TrackItemWithStatus extends ConsumerWidget {
                 hasLocalPlaybackCandidate: isInHistory || isInLocalLibrary,
               ),
           child: InkWell(
-            onTap: () => activate(
-              context,
-              ref,
-              track,
-              isQueued: isQueued,
-              isInHistory: isInHistory,
-              isInLocalLibrary: isInLocalLibrary,
-              onDownload: onDownload,
-            ),
+            onTap: () => activate(context, ref, track),
             onLongPress: () =>
                 TrackCollectionQuickActions.showTrackOptionsSheet(
                   context,
@@ -366,12 +358,8 @@ class _TrackItemWithStatus extends ConsumerWidget {
   static Future<void> activate(
     BuildContext context,
     WidgetRef ref,
-    Track track, {
-    required bool isQueued,
-    required bool isInHistory,
-    required bool isInLocalLibrary,
-    required void Function({bool forceQualityPicker}) onDownload,
-  }) async {
+    Track track,
+  ) async {
     // In the Studio player the track row listens; the separate ↓ icon
     // downloads. Prefer a finished local copy even with no internet access.
     final local = await playLocalIfAvailable(context, ref, track);
