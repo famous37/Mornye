@@ -19,6 +19,7 @@ import 'package:mornye/services/app_state_database.dart';
 import 'package:mornye/services/media_library_browser.dart';
 import 'package:mornye/services/sqlite_helpers.dart' show normalizeLookupText;
 import 'package:mornye/services/platform_bridge.dart';
+import 'package:mornye/services/online_stream_support.dart' as online;
 import 'package:mornye/services/playback_normalization.dart';
 import 'package:mornye/services/playback_automation.dart';
 import 'package:mornye/services/playback_session_writer.dart';
@@ -1188,68 +1189,81 @@ class MusicPlayerHandler extends BaseAudioHandler
     // Catalog queue items are lazily resolved when they actually start, not
     // when the album opens. This avoids storing/downloads and expired URLs.
     if (media.source.startsWith('mornye-online://')) {
+      // Later tracks resolve their own signed URL only when they start. If
+      // one source fails, the queue transparently checks the next available
+      // full-track provider; no preview or download is ever substituted.
       final uri = Uri.tryParse(media.source);
-      final provider = uri?.host ?? '';
-      if (provider.isEmpty || uri == null || uri.pathSegments.isEmpty) {
-        return null;
-      }
+      if (uri == null || uri.pathSegments.isEmpty) return null;
       final query = uri.queryParameters;
+      final enabledIds = uri.host == 'auto'
+          ? (query['providers'] ?? '')
+              .split(',')
+              .where((id) => id.trim().isNotEmpty)
+              .toList()
+          : <String>[uri.host];
+      final candidates = online.orderedOnlineProviders(
+        enabledIds,
+        preferred: query['preferred'],
+        trackSource: query['source'],
+      );
+      if (candidates.isEmpty) return null;
       final request = <String, dynamic>{
         'id': uri.pathSegments.first,
         'title': query['title'] ?? media.title,
         'artist': query['artist'] ?? media.artist,
         'album': query['album'] ?? media.album,
+        'source': query['source'] ?? '',
         'isrc': query['isrc'] ?? '',
+        'deezer_id': query['deezer_id'] ?? '',
         'duration_ms':
             int.tryParse(query['duration_ms'] ?? '') ??
             (media.duration?.inMilliseconds ?? 0),
         'quality': query['quality'] ?? 'HI_RES_LOSSLESS',
       };
-      try {
-        final result = await PlatformBridge.invokeExtensionAction(
-          provider,
-          'resolvePlaybackStream',
-          input: Map<String, dynamic>.from(request),
-        );
-        final url = result['url']?.toString().trim() ?? '';
-        final parsed = Uri.tryParse(url);
-        if (result['success'] == false ||
-            result['full_track'] != true ||
-            result['encrypted'] == true ||
-            result['requires_headers'] == true ||
-            parsed?.scheme != 'https' ||
-            parsed?.host.isEmpty != false) {
-          _log.w(
-            'Online stream provider did not return playable full audio: '
-            '${result['error'] ?? 'unavailable'}',
+      for (final provider in candidates) {
+        try {
+          final result = await PlatformBridge.invokeExtensionAction(
+            provider,
+            'resolvePlaybackStream',
+            input: Map<String, dynamic>.from(request),
           );
-          return null;
-        }
-        // Add verified technical data for the *current* item only; metadata
-        // must not be inferred from the requested quality.
-        if (_index >= 0 &&
-            _index < _media.length &&
-            _media[_index].id == media.id) {
-          final current = mediaItem.value;
-          if (current?.id == media.id) {
-            final extras = <String, dynamic>{
-              ...?current?.extras,
-              'resolvedSource': url,
-            };
-            for (final key in ['bit_depth', 'sample_rate', 'bitrate']) {
-              final number = result[key];
-              if (number is num && number > 0) {
-                extras[key] = number.toInt();
-              }
-            }
-            mediaItem.add(current!.copyWith(extras: extras));
+          if (!online.isFullOnlineStream(result)) {
+            _log.w(
+              'Online provider $provider has no playable full track: '
+              "${result['error'] ?? 'not available'}",
+            );
+            continue;
           }
+          final url = result['url'].toString().trim();
+          // Display actual provider + codec on this track rather than the
+          // requested quality (e.g. SoundCloud AAC is not 24-bit FLAC).
+          if (_index >= 0 &&
+              _index < _media.length &&
+              _media[_index].id == media.id) {
+            final current = mediaItem.value;
+            if (current?.id == media.id) {
+              final extras = <String, dynamic>{
+                ...?current?.extras,
+                'resolvedSource': url,
+                'online_provider': provider,
+              };
+              final format = online.receivedStreamFormat(result);
+              if (format != null) extras['format'] = format;
+              for (final key in ['bit_depth', 'sample_rate', 'bitrate']) {
+                final number = result[key];
+                if (number is num && number > 0) {
+                  extras[key] = number.toInt();
+                }
+              }
+              mediaItem.add(current!.copyWith(extras: extras));
+            }
+          }
+          return url;
+        } catch (error) {
+          _log.w('Could not resolve online stream from $provider: $error');
         }
-        return url;
-      } catch (error) {
-        _log.w('Online stream resolution failed for $provider: $error');
-        return null;
       }
+      return null;
     }
     if (_dependencies.sourceDeletionEvents.isDeleting(media.source)) {
       return null;
