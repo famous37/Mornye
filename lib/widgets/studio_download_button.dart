@@ -1,39 +1,48 @@
 import 'package:flutter/material.dart';
 
-/// Compact download control for the Studio-inspired listening experience.
-///
-/// Playing and downloading are intentionally independent operations:
-/// tapping this button invokes Mornye's existing downloader and quality
-/// selection without altering the current playback queue.
+/// Separate offline import control for the Studio-inspired audio experience.
+/// Tap uses the existing downloader; long-press forces its quality selector.
 class StudioDownloadButton extends StatelessWidget {
   const StudioDownloadButton({
     super.key,
     required this.onDownload,
+    this.onChooseQuality,
     this.isQueued = false,
-    this.size = 42,
+    this.size = 44,
   });
 
   final VoidCallback onDownload;
+  final VoidCallback? onChooseQuality;
   final bool isQueued;
   final double size;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: isQueued ? 'Download queued' : 'Download for offline playback',
-      child: IconButton(
-        onPressed: isQueued ? null : onDownload,
-        tooltip: isQueued ? 'Download queued' : 'Download',
-        icon: Icon(
-          isQueued
-              ? Icons.downloading_rounded
-              : Icons.download_for_offline_outlined,
-          size: 23,
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      enabled: !isQueued,
+      label: isQueued
+          ? 'Download queued'
+          : 'Download for offline listening; hold to select quality',
+      child: InkWell(
+        onTap: isQueued ? null : onDownload,
+        onLongPress: isQueued ? null : onChooseQuality,
+        borderRadius: BorderRadius.circular(size / 2),
+        child: SizedBox.square(
+          dimension: size,
+          child: Center(
+            child: Icon(
+              isQueued
+                  ? Icons.downloading_rounded
+                  : Icons.download_for_offline_outlined,
+              size: 23,
+              color: isQueued
+                  ? colors.primary
+                  : colors.onSurfaceVariant,
+            ),
+          ),
         ),
-        color: scheme.onSurfaceVariant,
-        constraints: BoxConstraints.tightFor(width: size, height: size),
-        visualDensity: VisualDensity.compact,
       ),
     );
   }
