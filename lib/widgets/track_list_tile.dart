@@ -141,12 +141,7 @@ class TrackListTile extends ConsumerWidget {
       ),
       onTap: isSelectionMode
           ? onToggleSelection
-          : () => _handleTap(
-              context,
-              ref,
-              isQueued: isQueued,
-              isInLocalLibrary: isInLocalLibrary,
-            ),
+          : () => _handleTap(context, ref),
       onLongPress: isSelectionMode
           ? null
           : onEnterSelectionMode ??
@@ -159,13 +154,7 @@ class TrackListTile extends ConsumerWidget {
     );
   }
 
-  void _handleTap(
-    BuildContext context,
-    WidgetRef ref, {
-    required bool isQueued,
-    required bool isInLocalLibrary,
-  }) async {
-    if (isQueued) return;
+  void _handleTap(BuildContext context, WidgetRef ref) async {
 
     // Qobuz-style behavior: a row tap listens, never starts a download.
     // The separate download button handles offline saving/quality variants.
