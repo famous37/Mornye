@@ -167,12 +167,8 @@ class TrackListTile extends ConsumerWidget {
   }) async {
     if (isQueued) return;
 
-    final settings = ref.read(settingsProvider);
-    if (settings.allowQualityVariants && (isInHistory || isInLocalLibrary)) {
-      onDownload(forceQualityPicker: true);
-      return;
-    }
-
+    // Qobuz-style behavior: a row tap listens, never starts a download.
+    // The separate download button handles offline saving/quality variants.
     final playedLocal = await playLocalIfAvailable(context, ref, track);
     if (playedLocal) {
       return;
