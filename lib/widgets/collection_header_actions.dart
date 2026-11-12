@@ -57,22 +57,30 @@ class CollectionHeaderActions extends StatelessWidget {
         );
       },
     );
+    // A Qobuz-inspired hierarchy: listening is the primary action, while
+    // offline import remains one tap away on a separate download control.
     final play = onPlayOnline == null
         ? null
-        : HeaderCircleButton(
-            icon: Icons.play_circle_fill_rounded,
-            tonal: true,
-            tooltip: 'Play album / playlist online',
+        : HeaderFilledButton(
+            icon: Icons.play_arrow_rounded,
+            label: 'Play',
             onPressed: enabled ? onPlayOnline : null,
           );
-    final download = HeaderFilledButton(
-      icon: mornye ? CupertinoIcons.arrow_down_circle_fill : downloadIcon,
-      tonal: tonalDownload,
-      label: mornye
-          ? context.l10n.dialogDownload
-          : context.l10n.downloadAllCount(tracks.length),
-      onPressed: enabled ? onDownloadAll : null,
-    );
+    final Widget download = play == null
+        ? HeaderFilledButton(
+            icon: mornye ? CupertinoIcons.arrow_down_circle_fill : downloadIcon,
+            tonal: tonalDownload,
+            label: mornye
+                ? context.l10n.dialogDownload
+                : context.l10n.downloadAllCount(tracks.length),
+            onPressed: enabled ? onDownloadAll : null,
+          )
+        : HeaderCircleButton(
+            icon: mornye ? CupertinoIcons.arrow_down_circle_fill : downloadIcon,
+            tonal: true,
+            tooltip: 'Download all for offline listening',
+            onPressed: enabled ? onDownloadAll : null,
+          );
     final addToPlaylist = HeaderCircleButton(
       icon: addToPlaylistIcon,
       tonal: true,
@@ -92,15 +100,18 @@ class CollectionHeaderActions extends StatelessWidget {
         children: [
           love,
           const SizedBox(width: 8),
-          if (play != null) ...[play, const SizedBox(width: 8)],
-          Flexible(child: SizedBox(width: 144, child: download)),
+          Flexible(child: SizedBox(width: 144, child: play ?? download)),
+          if (play != null) ...[
+            const SizedBox(width: 8),
+            download,
+          ],
           const SizedBox(width: 8),
           addToPlaylist,
         ],
       );
     }
     return ExpressiveButtonGroup(
-      flexible: play == null ? const {1} : const {2},
+      flexible: const {1},
       children: [love, if (play != null) play, download, addToPlaylist],
     );
   }

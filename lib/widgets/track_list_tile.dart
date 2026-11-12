@@ -11,8 +11,9 @@ import 'package:mornye/controllers/local_playback.dart';
 import 'package:mornye/widgets/audio_quality_badges.dart';
 import 'package:mornye/widgets/track_card.dart';
 import 'package:mornye/widgets/in_library_badge.dart';
-import 'package:mornye/widgets/preview_button.dart';
 import 'package:mornye/widgets/online_play_button.dart';
+import 'package:mornye/widgets/studio_download_button.dart';
+import 'package:mornye/controllers/play_online.dart';
 import 'package:mornye/widgets/track_collection_quick_actions.dart';
 
 /// Track row shared by the album and playlist screens. Tap offers another
@@ -126,7 +127,12 @@ class TrackListTile extends ConsumerWidget {
               tracks: onlineTracks ?? [track],
               index: onlineIndex ?? 0,
             ),
-          PreviewButton(track: track),
+          if (!isSelectionMode)
+            StudioDownloadButton(
+              onChooseQuality: () => onDownload(forceQualityPicker: true),
+              onDownload: () => onDownload(),
+              isQueued: isQueued,
+            ),
           TrackCollectionQuickActions(
             track: track,
             hasLocalPlaybackCandidate: isInHistory || isInLocalLibrary,
@@ -135,12 +141,7 @@ class TrackListTile extends ConsumerWidget {
       ),
       onTap: isSelectionMode
           ? onToggleSelection
-          : () => _handleTap(
-              context,
-              ref,
-              isQueued: isQueued,
-              isInLocalLibrary: isInLocalLibrary,
-            ),
+          : () => _handleTap(context, ref),
       onLongPress: isSelectionMode
           ? null
           : onEnterSelectionMode ??
@@ -153,26 +154,23 @@ class TrackListTile extends ConsumerWidget {
     );
   }
 
-  void _handleTap(
-    BuildContext context,
-    WidgetRef ref, {
-    required bool isQueued,
-    required bool isInLocalLibrary,
-  }) async {
-    if (isQueued) return;
+  void _handleTap(BuildContext context, WidgetRef ref) async {
 
-    final settings = ref.read(settingsProvider);
-    if (settings.allowQualityVariants && (isInHistory || isInLocalLibrary)) {
-      onDownload(forceQualityPicker: true);
-      return;
-    }
-
+    // Qobuz-style behavior: a row tap listens, never starts a download.
+    // The separate download button handles offline saving/quality variants.
     final playedLocal = await playLocalIfAvailable(context, ref, track);
     if (playedLocal) {
       return;
     }
 
-    onDownload();
+    if (context.mounted) {
+      await playOnlineQueue(
+        context,
+        ref,
+        onlineTracks ?? [track],
+        startIndex: onlineIndex ?? 0,
+      );
+    }
   }
 
   /// What a tap on the row does, for the desktop song table: offers another

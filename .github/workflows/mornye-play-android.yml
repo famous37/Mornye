@@ -1,12 +1,14 @@
-name: Mornye custom Android APK — Play online
+name: Mornye Studio custom Android APK
 
 on:
   push:
     branches:
       - main
       - feature/play-after-download
+      - feature/qobuz-inspired-player
     paths:
       - 'lib/**'
+      - 'test/**'
       - '.github/workflows/mornye-play-android.yml'
       - 'scripts/**'
       - 'rust_backend/**'
@@ -14,6 +16,7 @@ on:
   pull_request:
     branches:
       - main
+      - feature/play-after-download
   workflow_dispatch:
 
 permissions:
@@ -74,10 +77,13 @@ jobs:
         run: |
           flutter pub get
           echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
-          dart format lib/controllers/play_online.dart lib/widgets/track_collection_quick_actions.dart
+          dart format lib/controllers/play_online.dart lib/widgets/track_collection_quick_actions.dart lib/widgets/studio_download_button.dart lib/widgets/track_list_tile.dart lib/screens/home_tab.dart lib/screens/home_tab_widgets.dart lib/widgets/collection_header_actions.dart lib/models/theme_settings.dart
 
-      - name: Analyze new Dart controller and menu
-        run: dart analyze lib/controllers/play_online.dart lib/widgets/track_collection_quick_actions.dart
+      - name: Analyze Studio UI and playback code
+        run: dart analyze lib/controllers/play_online.dart lib/widgets/track_collection_quick_actions.dart lib/widgets/studio_download_button.dart lib/widgets/track_list_tile.dart lib/screens/home_tab.dart lib/widgets/collection_header_actions.dart lib/models/theme_settings.dart
+
+      - name: Test online stream behavior
+        run: flutter test test/online_stream_test.dart
 
       - name: Configure optional private release signing
         env:
@@ -111,7 +117,7 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: Mornye-Online-ARM64-APK
+          name: Mornye-Studio-ARM64-APK
           retention-days: 30
           if-no-files-found: error
           path: |

@@ -236,15 +236,7 @@ class _TrackItemWithStatus extends ConsumerWidget {
                 hasLocalPlaybackCandidate: isInHistory || isInLocalLibrary,
               ),
           child: InkWell(
-            onTap: () => activate(
-              context,
-              ref,
-              track,
-              isQueued: isQueued,
-              isInHistory: isInHistory,
-              isInLocalLibrary: isInLocalLibrary,
-              onDownload: onDownload,
-            ),
+            onTap: () => activate(context, ref, track),
             onLongPress: () =>
                 TrackCollectionQuickActions.showTrackOptionsSheet(
                   context,
@@ -334,7 +326,11 @@ class _TrackItemWithStatus extends ConsumerWidget {
                     ),
                   ),
                   OnlinePlayButton(tracks: [track], index: 0),
-                  PreviewButton(track: track),
+                  StudioDownloadButton(
+                    onChooseQuality: () => onDownload(forceQualityPicker: true),
+                    onDownload: () => onDownload(),
+                    isQueued: isQueued,
+                  ),
                   TrackCollectionQuickActions(
                     track: track,
                     hasLocalPlaybackCandidate: isInHistory || isInLocalLibrary,
@@ -362,57 +358,16 @@ class _TrackItemWithStatus extends ConsumerWidget {
   static Future<void> activate(
     BuildContext context,
     WidgetRef ref,
-    Track track, {
-    required bool isQueued,
-    required bool isInHistory,
-    required bool isInLocalLibrary,
-    required void Function({bool forceQualityPicker}) onDownload,
-  }) async {
-    if (isQueued) return;
-
-    final settings = ref.read(settingsProvider);
-    final allowExistingDownload =
-        settings.allowQualityVariants || !settings.deduplicateDownloads;
-
-    if (!allowExistingDownload && isInLocalLibrary) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.snackbarAlreadyInLibrary(track.name)),
-          ),
-        );
-      }
-      return;
+    Track track,
+  ) async {
+    // In the Studio player the track row listens; the separate ↓ icon
+    // downloads. Prefer a finished local copy even with no internet access.
+    final local = await playLocalIfAvailable(context, ref, track);
+    if (local) return;
+    if (context.mounted) {
+      await playOnlineQueue(context, ref, [track]);
     }
 
-    if (!allowExistingDownload) {
-      final historyNotifier = ref.read(downloadHistoryProvider.notifier);
-      final historyItem = await historyNotifier.findExistingTrackAsync(
-        historyLookupForTrack(track),
-      );
-      if (historyItem != null) {
-        final exists = await fileExists(historyItem.filePath);
-        if (exists) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  context.l10n.snackbarAlreadyDownloaded(track.name),
-                ),
-              ),
-            );
-          }
-          return;
-        } else {
-          historyNotifier.removeFromHistory(historyItem.id);
-        }
-      }
-    }
-
-    onDownload(
-      forceQualityPicker:
-          settings.allowQualityVariants && (isInHistory || isInLocalLibrary),
-    );
   }
 }
 
