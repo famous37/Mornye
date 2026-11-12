@@ -1,0 +1,62 @@
+name: Package Mornye Play multi-source online extensions
+
+on:
+  push:
+    branches:
+      - feature/multisource-streaming
+    paths:
+      - 'scripts/patch_multisource_online_extensions.py'
+      - '.github/workflows/multisource-online-extensions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-extensions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Mornye Play fork
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Clone upstream open-source extension registry
+        run: git clone --depth=1 https://github.com/mornyeapp/Mornye-Extension.git build/extension-registry
+
+      - name: Add directly playable HTTPS extension actions
+        run: python3 scripts/patch_multisource_online_extensions.py build/extension-registry
+
+      - name: Validate and package SoundCloud and Jellyfin
+        run: |
+          set -euo pipefail
+          node --check build/extension-registry/sources/soundcloud/index.js
+          node --check build/extension-registry/sources/jellyfin/index.js
+          cd build/extension-registry
+          python3 scripts/build_packages.py soundcloud
+          python3 scripts/build_packages.py jellyfin
+          python3 scripts/build_packages.py --check soundcloud
+          python3 scripts/build_packages.py --check jellyfin
+          test -s extensions/soundcloud.sflx
+          test -s extensions/jellyfin.sflx
+          sha256sum extensions/soundcloud.sflx > soundcloud-online.sha256
+          sha256sum extensions/jellyfin.sflx > jellyfin-online.sha256
+
+      - name: Upload SoundCloud full-stream package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Mornye-SoundCloud-Online-sflx
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            build/extension-registry/extensions/soundcloud.sflx
+            build/extension-registry/soundcloud-online.sha256
+
+      - name: Upload Jellyfin full-stream package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Mornye-Jellyfin-Online-sflx
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            build/extension-registry/extensions/jellyfin.sflx
+            build/extension-registry/jellyfin-online.sha256
