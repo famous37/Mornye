@@ -1,0 +1,88 @@
+name: Publish Mornye Mod 5.3.1 Online Beta 1
+
+on:
+  push:
+    branches:
+      - feature/play-after-download
+    paths:
+      - .github/workflows/publish-mornye-mod-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG_NAME: v5.3.1-online.1
+    steps:
+      - name: Download successful Android and Qobuz artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p stage/apk stage/qobuz dist
+          gh run download 43265985675 --repo "$GITHUB_REPOSITORY" --name "Mornye-Online-ARM64-APK" --dir stage/apk
+          gh run download 43265985666 --repo "$GITHUB_REPOSITORY" --name "Qobuz-Online-Experimental-sflx" --dir stage/qobuz
+          apk="$(find stage/apk -type f -name '*.apk' -print -quit)"
+          sflx="$(find stage/qobuz -type f -name '*.sflx' -print -quit)"
+          test -n "$apk" && test -n "$sflx"
+          cp "$apk" dist/Mornye_Mod_v5.3.1_Online_HiRes_FLAC_ARM64.apk
+          cp "$sflx" dist/Qobuz_Online_v1.2.29.sflx
+          echo '1cc7e71af09258cb6880302110cad4b7dbc25616bc41cbb25830551f693e5723  dist/Mornye_Mod_v5.3.1_Online_HiRes_FLAC_ARM64.apk' | sha256sum -c -
+          echo '98ae592d1b3b30169a9e910a93ad41af9adc2ba6d2eeb02cacf6b0fd5c55d677  dist/Qobuz_Online_v1.2.29.sflx' | sha256sum -c -
+          (cd dist && sha256sum Mornye_Mod_v5.3.1_Online_HiRes_FLAC_ARM64.apk Qobuz_Online_v1.2.29.sflx > SHA256SUMS.txt)
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          cat > RELEASE_NOTES.md <<'EOF'
+          ## Mornye Mod 5.3.1 — Online Hi-Res (Beta 1)
+
+          Неофіційна експериментальна модифікація Mornye з відтворенням повних музичних композицій онлайн **без попереднього завантаження** та без відкривання сторонніх музичних застосунків.
+
+          ### Нові можливості
+          - Пряме онлайн-відтворення у внутрішньому плеєрі.
+          - Кнопки **▶** безпосередньо біля композицій у списках і для альбому або плейлиста.
+          - Черга композицій і автоматичне перемикання на наступний трек після завершення поточного.
+          - За замовчуванням запитується найвища доступна якість **Hi-Res FLAC**, до 24-bit/192 kHz, якщо вона доступна в провайдера.
+          - Утримуйте **▶**, щоб змінити якість відтворення; вибір зберігається.
+          - Відображення розрядности, частоти дискретизації та середнього бітрейту, якщо ці дані надає провайдер/сервер.
+          - Збережено стандартні функції завантаження Mornye.
+
+          ### Установлення
+          1. Завантажте **Mornye_Mod_v5.3.1_Online_HiRes_FLAC_ARM64.apk** (Android ARM64).
+          2. Установіть та активуйте **Qobuz_Online_v1.2.29.sflx** в менеджері розширень Mornye.
+          3. Відкрийте альбом або композицію й натисніть **▶**. Довге натискання **▶** відкриває вибір якости.
+
+          ### Важливо
+          **Beta / experimental:** автоматичний перехід між потоками, термін дії підписаних URL та відображення бітрейту потребують додаткової перевірки на реальному пристрої. Якість залежить від доступности аудіо в провайдера; 24-bit/192 kHz не гарантується. Для FLAC середній бітрейт може бути недоступним, а миттєвий бітрейт змінюється.
+
+          APK зібрано GitHub Actions зі SHA вихідного коду **a4a9e74f26e5c4188a7a330ca1bbcc187035b5da**. Це **неофіційний мод**, не реліз авторів Mornye.
+
+          **Підпис APK:** тестовий ключ GitHub Actions може відрізнятися між збірками. Якщо оновлення поверх старої версії не встановлюється, спочатку збережіть налаштування/дані; не видаляйте робочу версію без резервної копії. Для наступних оновлень потрібен стабільний ключ підпису.
+
+          Оригінальний застосунок: https://github.com/mornyeapp/Mornye
+
+          Код мода: https://github.com/famous37/Mornye/tree/feature/play-after-download
+          EOF
+
+      - name: Publish public GitHub pre-release and attach both binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$TAG_NAME" --notes-file RELEASE_NOTES.md --title "Mornye Mod 5.3.1 Online Hi-Res — Beta 1" --prerelease --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG_NAME" dist/* \
+              --target a4a9e74f26e5c4188a7a330ca1bbcc187035b5da \
+              --title "Mornye Mod 5.3.1 Online Hi-Res — Beta 1" \
+              --notes-file RELEASE_NOTES.md \
+              --prerelease \
+              --repo "$GITHUB_REPOSITORY"
+          fi
+          gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --json url,tagName,isPrerelease,assets
