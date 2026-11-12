@@ -47,7 +47,7 @@ enum MornyeAccent { red, orange, green, teal, blue, purple, pink }
 MornyeAccent mornyeAccentFromString(String? value) =>
     MornyeAccent.values.firstWhere(
       (accent) => accent.name == value,
-      orElse: () => MornyeAccent.blue,
+      orElse: () => MornyeAccent.orange,
     );
 
 /// Style used until the person picks one: Mornye on macOS, Material on
@@ -61,7 +61,7 @@ AppThemeStyle themeStyleFromString(String? value) => AppThemeStyle.values
     .firstWhere((style) => style.name == value, orElse: defaultAppThemeStyle);
 
 /// Fallback seed when dynamic color and a custom seed are unavailable.
-const int kDefaultSeedColor = 0xFF1DB954;
+const int kDefaultSeedColor = 0xFFD6A64E;
 
 class ThemeSettings {
   final ThemeMode themeMode;
@@ -80,12 +80,12 @@ class ThemeSettings {
   final bool mornyeGlassOutlines;
 
   const ThemeSettings({
-    this.themeMode = ThemeMode.system,
-    this.useDynamicColor = true,
+    this.themeMode = ThemeMode.dark,
+    this.useDynamicColor = false,
     this.seedColorValue = kDefaultSeedColor,
-    this.useAmoled = false,
+    this.useAmoled = true,
     this.style = AppThemeStyle.material,
-    this.mornyeAccent = MornyeAccent.blue,
+    this.mornyeAccent = MornyeAccent.orange,
     this.useSystemFont = false,
     this.customFontId = '',
     this.customFontName = '',
@@ -158,9 +158,9 @@ class ThemeSettings {
   factory ThemeSettings.fromJson(Map<String, dynamic> json) {
     return ThemeSettings(
       themeMode: themeModeFromString(json[kThemeModeKey] as String?),
-      useDynamicColor: json[kUseDynamicColorKey] as bool? ?? true,
+      useDynamicColor: json[kUseDynamicColorKey] as bool? ?? false,
       seedColorValue: json[kSeedColorKey] as int? ?? kDefaultSeedColor,
-      useAmoled: json[kUseAmoledKey] as bool? ?? false,
+      useAmoled: json[kUseAmoledKey] as bool? ?? true,
       style: themeStyleFromString(json[kThemeStyleKey] as String?),
       mornyeAccent: mornyeAccentFromString(json[kMornyeAccentKey] as String?),
       useSystemFont: json[kUseSystemFontKey] as bool? ?? false,
@@ -217,7 +217,7 @@ class ThemeSettings {
 }
 
 ThemeMode themeModeFromString(String? value) {
-  if (value == null) return ThemeMode.system;
+  if (value == null) return ThemeMode.dark;
   return ThemeMode.values.firstWhere(
     (e) => e.name == value,
     orElse: () => ThemeMode.system,
