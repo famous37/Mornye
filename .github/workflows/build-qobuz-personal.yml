@@ -68,6 +68,16 @@ jobs:
           pathlib.Path('patch_auth_v105.py').write_bytes(patch)
           PY
           python3 patch_auth_v105.py qobuz-extension
+      - name: Validate personal Qobuz user ID for profile requests
+        run: |
+          python3 - <<'PY'
+          import base64,hashlib,pathlib,zlib
+          raw=pathlib.Path('qobuz-build/patch_auth_v106.py.zlib.b64').read_text().strip()
+          patch=zlib.decompress(base64.b64decode(raw))
+          assert hashlib.sha256(patch).hexdigest() == 'fb846b2a356f6d4295d10441f7f1cd31236fc45dd6e931c4944d3aba15787572'
+          pathlib.Path('patch_auth_v106.py').write_bytes(patch)
+          PY
+          python3 patch_auth_v106.py qobuz-extension
       - name: Compile extension against available Android API 36
         working-directory: qobuz-extension
         run: |
@@ -81,6 +91,6 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gladix-Qobuz-Personal-v1.0.5-APK
+          name: Gladix-Qobuz-Personal-v1.0.6-APK
           path: qobuz-extension/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
