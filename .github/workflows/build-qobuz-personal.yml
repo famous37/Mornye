@@ -58,6 +58,16 @@ jobs:
           pathlib.Path('patch_auth_v104.py').write_bytes(patch)
           PY
           python3 patch_auth_v104.py qobuz-extension
+      - name: Fix web player session callback for Qobuz Personal v1.0.5
+        run: |
+          python3 - <<'PY'
+          import base64,hashlib,pathlib,zlib
+          raw=pathlib.Path('qobuz-build/patch_auth_v105.py.zlib.b64').read_text().strip()
+          patch=zlib.decompress(base64.b64decode(raw))
+          assert hashlib.sha256(patch).hexdigest() == '70c8b3eef74d7ce6335a07a115eea2fd0a3589b60d8f40db284a7023b22ea571'
+          pathlib.Path('patch_auth_v105.py').write_bytes(patch)
+          PY
+          python3 patch_auth_v105.py qobuz-extension
       - name: Compile extension against available Android API 36
         working-directory: qobuz-extension
         run: |
@@ -71,6 +81,6 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gladix-Qobuz-Personal-v1.0.4-APK
+          name: Gladix-Qobuz-Personal-v1.0.5-APK
           path: qobuz-extension/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
