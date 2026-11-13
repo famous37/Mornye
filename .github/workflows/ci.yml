@@ -398,8 +398,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Use Android SDK preinstalled on GitHub runner
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME:-not-set}"
+          sdkmanager --version
+          yes | sdkmanager --licenses >/dev/null || true
       - name: Install platform and build tools
         run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
       - name: Checkout verified Qobuz extension
