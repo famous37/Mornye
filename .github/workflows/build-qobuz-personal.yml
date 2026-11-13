@@ -1,0 +1,52 @@
+name: Qobuz Personal APK (isolated)
+on:
+  push:
+    branches:
+      - build/qobuz-personal-2026-11-13
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-qobuz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout build configuration
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install platform and build tools
+        run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
+      - name: Checkout verified Qobuz extension
+        run: |
+          git clone https://github.com/TheWinner02/echo-qobuz-extension.git qobuz-extension
+          cd qobuz-extension
+          git checkout --detach a53ab8e95e6b60d0f0efb038a49fd24e1255dcf1
+      - name: Apply Qobuz Personal patch (source SHA256 verified)
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import zlib,base64,hashlib
+          blob=zlib.decompress(base64.b64decode("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"))
+          assert hashlib.sha256(blob).hexdigest() == "038c4142288e56b9542f3d32dc06e4b88caae58c49f131969dbe40da2c628895"
+          Path("patch_qobuz_personal.py").write_bytes(blob)
+          PY
+          python3 patch_qobuz_personal.py qobuz-extension
+      - name: Build signed debug APK
+        working-directory: qobuz-extension
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleDebug
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gladix-Qobuz-Personal-v1.0.3-APK
+          path: qobuz-extension/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
