@@ -32,7 +32,7 @@ jobs:
           "$SDKMANAGER" --version
           yes | "$SDKMANAGER" --licenses >/dev/null || true
       - name: Install platform and build tools
-        run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - name: Checkout verified Qobuz extension
         run: |
           git clone https://github.com/TheWinner02/echo-qobuz-extension.git qobuz-extension
@@ -48,6 +48,11 @@ jobs:
           Path("patch_qobuz_personal.py").write_bytes(blob)
           PY
           python3 patch_qobuz_personal.py qobuz-extension
+      - name: Compile extension against available Android API 36
+        working-directory: qobuz-extension
+        run: |
+          sed -i 's/compileSdk = 37/compileSdk = 36/' app/build.gradle.kts
+          grep -q 'compileSdk = 36' app/build.gradle.kts
       - name: Build signed debug APK
         working-directory: qobuz-extension
         run: |
